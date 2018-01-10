@@ -1,19 +1,22 @@
 #include "ConfigLoad.h"
 #include "MLog.h"
 #include <iostream>
-#include <unistd.h> //sleep
+// #include <unistd.h> //sleep
 using namespace MThttpd;
-void func()
-{
-    auto conf = ConfigLoad::GetIns();
-    std::cout << conf->GetConfValue("port") << std::endl;
-    std::cout << conf->GetConfValue("logfile") << std::endl;
-    auto log = MLog::GetIns();
-}
 int main(int argc, const char *agrv[])
 {
-    func();
+    // auto log = MLog::GetIns();
     std::cout << "here" << std::endl;
-    sleep(1);
-    // return 0;
+    // log->append(Level::INFO, {"log1", WHERE});
+    // log->append(Level::WARN, {"log2", WHERE});
+    // log->append(Level::INFO, {"log3", WHERE});
+    // log->append(Level::ERROR, {"log4", WHERE});
+    // log->append(Level::ERROR, {"log5", WHERE});
+    // log->append(Level::ERROR, {"log6", WHERE});
+    // log->append(Level::ERROR, {"log7", WHERE});
+    // log->append(Level::ERROR, {"log8", WHERE});
+    // log->append(Level::ERROR, {"log9", WHERE});
+    // log->stop();
+
+    return 0;
 }
