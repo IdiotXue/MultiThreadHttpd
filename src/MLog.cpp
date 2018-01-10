@@ -1,7 +1,9 @@
 #include "MLog.h"
 #include <iostream>
 #include <chrono>
+#include <ctime> //localtime_r,strftime
 using namespace MThttpd;
+using std::chrono::system_clock;
 
 pthread_once_t MLog::sm_pOnce = PTHREAD_ONCE_INIT; //必须这样初始化
 std::shared_ptr<MLog> MLog::sm_pIns;               //定义但没有初始化
@@ -40,7 +42,7 @@ void MLog::WriteLog()
             //三种情况要唤醒：1.超时。2.待写入缓冲区满。3.程序要结束了。
             //负载极端大时，还未wait待写缓冲区就又满了，则m_WrCond.notify_one()没能通知到m_WrCond.wait_for
             //如果不做m_nIndexC < sm_nBufSize的判断，会使这种情况时MLog性能极差。
-            //再判断一次m_bIsRun是为了降低平稳终止不及时的可能性。
+            //TODO：再判断一次m_bIsRun是为了降低平稳终止不及时的可能性(依然会)
             if (m_nIndexC < sm_nBufSize && m_bIsRun)
                 while (m_WrCond.wait_for(lck, std::chrono::seconds(5)) == std::cv_status::no_timeout)
                     if (!m_bIsRun || m_nIndexC == sm_nBufSize)
@@ -90,20 +92,26 @@ void MLog::init()
  */
 void MLog::append(Level level, std::initializer_list<std::string> logline)
 {
-    std::string msg;
+    auto tpNow = system_clock::now();         //time_point
+    auto tt = system_clock::to_time_t(tpNow); //time_t,1970/1/1至今的UTC秒数
+    struct tm tmBuf;
+    localtime_r(&tt, &tmBuf); //将time_t转换为当地时区的时间日期，线程安全，localtime返回static对象的指针多线程不安全
+    char formatTime[32];
+    strftime(formatTime, sizeof(formatTime), "%Y/%m/%d %X", &tmBuf);
+    std::string msg(formatTime);
     switch (level)
     {
     case Level::INFO:
-        msg = " INFO ";
+        msg += " INFO ";
         break;
     case Level::WARN:
-        msg = " WARN ";
+        msg += " WARN ";
         break;
     case Level::ERROR:
-        msg = " ERROR ";
+        msg += " ERROR ";
         break;
     default:
-        msg = " UnKown ";
+        msg += " UnKown ";
         break;
     }
     for (const auto &str : logline)

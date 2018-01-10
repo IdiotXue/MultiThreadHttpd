@@ -55,7 +55,7 @@ private:
   //用于读取缓冲队列并写入日志文件的线程，不能在构造函数中初始化,
   //因为需要绑定sm_pIns(未构造完毕不能传入)，所以必须是heap object
   std::shared_ptr<std::thread> m_pWrThread;
-  static const int sm_nBufSize = 2;   //缓冲区大小，以一条记录60个字符算，1024条记录是60KB，测试的时候设小点
+  static const int sm_nBufSize = 20;   //缓冲区大小，以一条记录60个字符算，1024条记录是60KB，测试的时候设小点
   std::vector<std::string> m_vsCurr;  //待写入缓冲，让其他线程写入日志
   std::vector<std::string> m_vsWrite; //写入日志文件的缓冲
   size_t m_nIndexC;                   //记录m_vsCurr有多少条记录

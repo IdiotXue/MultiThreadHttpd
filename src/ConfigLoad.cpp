@@ -11,7 +11,7 @@ std::shared_ptr<ConfigLoad> ConfigLoad::sm_pIns(new ConfigLoad("./conf/httpd.con
  * 加载配置文件
  * @param string
  */
-ConfigLoad::ConfigLoad(const string& filename)
+ConfigLoad::ConfigLoad(const string &filename)
 {
     std::ifstream iConf(filename); //析构时自动关闭
     if (!iConf.good())
