@@ -2,6 +2,8 @@
 #include <iostream>
 #include <chrono>
 #include <ctime> //localtime_r,strftime
+#include <cerrno>
+#include <cstring> //strerror_r
 using namespace MThttpd;
 using std::chrono::system_clock;
 
@@ -109,25 +111,32 @@ void MLog::append(Level level, std::initializer_list<std::string> logline)
         break;
     case Level::ERROR:
         msg += " ERROR ";
+        msg += _GE(errno) + " ";
         break;
     default:
         msg += " UnKown ";
         break;
     }
     for (const auto &str : logline)
-        msg += (str + " ");
+        msg += str + " ";
     //此处有3种情况：
     //1.负载较小时：写日志线程超时唤醒，主动交换缓冲区，则循环只执行一次
     //2.负载较大时：写日志线程在缓冲区满时被notify_one唤醒，在m_EmCond释放锁后，m_WrCond获得锁交换缓冲区后notify m_EmCond
     //3.负载极端大时：写日志线程的IO操作未执行完，待写缓冲区又满了，此时可能有多个线程在m_EmCond.wait，notify_one可能通知不到
     //m_WrCond，为使这种情况的性能不下降太多，m_WrCond.wait_for前要做相应判断，见WriteLog函数
-    std::unique_lock<std::mutex> lck(m_mutex);
-    while (m_nIndexC >= sm_nBufSize)
     {
-        m_WrCond.notify_one();                                          //负载极端大时可能通知不到，所以其wait_for前要做判断
-        m_EmCond.wait(lck, [this] { return m_nIndexC < sm_nBufSize; }); //进入休眠后才会解锁m_mutex,所以不会收不到通知
+        std::unique_lock<std::mutex> lck(m_mutex);
+        while (m_nIndexC >= sm_nBufSize)
+        {
+            m_WrCond.notify_one();                                          //负载极端大时可能通知不到，所以其wait_for前要做判断
+            m_EmCond.wait(lck, [this] { return m_nIndexC < sm_nBufSize; }); //进入休眠后才会解锁m_mutex,所以不会收不到通知
+        }
+        m_vsCurr[m_nIndexC++] = std::move(msg); //msg已无用，移动而不复制
     }
-    m_vsCurr[m_nIndexC++] = std::move(msg); //msg已无用，移动而不复制
+    //发生致命错误时，主动停止日志类，使缓冲区中的消息写入磁盘文件，
+    //以便让出错位置接下来抛出异常终止程序
+    if (level == Level::ERROR)
+        this->stop();
 }
 
 /**
@@ -139,4 +148,20 @@ void MLog::stop()
     m_WrCond.notify_one(); //只有一个写日志线程
     if (m_pWrThread->joinable())
         m_pWrThread->join();
+}
+/**
+ * 解析errno
+ * @param int 传入errno
+ * @return string errno对应的错误信息
+ */
+std::string MLog::GetErr(int errnum)
+{
+    char errBuf[128], *errStr;
+    errBuf[0] = '\0';
+    //奇怪的线程安全函数，man查了文档，它可能用errBuf也可能直接返回static空间的指针，
+    errStr = strerror_r(errnum, errBuf, sizeof(errBuf));
+    if (errBuf[0] == '\0')
+        return std::string(errStr);
+    else
+        return std::string(errBuf);
 }

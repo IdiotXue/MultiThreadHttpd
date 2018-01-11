@@ -13,6 +13,7 @@
 #include <string>
 #include <initializer_list>
 #include <atomic>
+#include <stdexcept>
 
 namespace MThttpd
 {
@@ -32,13 +33,14 @@ enum class Level
 class MLog
 {
 public:
-  static const std::shared_ptr<MLog> GetIns() //返回唯一实例
+  static const std::shared_ptr<MLog> &GetIns() //返回唯一实例
   {
     pthread_once(&sm_pOnce, &MLog::init); //可以确保多线程时init函数只执行一次，确保多线程安全
     return sm_pIns;
   }
   void append(Level level, std::initializer_list<std::string> msg);
-  void stop(); //终止写日志线程，写日志线程绑定了一个MLog的智能指针，要依靠智能指针析构MLog，必须先终止写日志线程;
+  void stop();                           //终止写日志线程，写日志线程绑定了一个MLog的智能指针，要依靠智能指针析构MLog，必须先终止写日志线程;
+  static std::string GetErr(int errnum); //用于解析errno
   ~MLog();
   MLog(const MLog &) = delete;
   MLog &operator=(const MLog &) = delete;
@@ -55,7 +57,7 @@ private:
   //用于读取缓冲队列并写入日志文件的线程，不能在构造函数中初始化,
   //因为需要绑定sm_pIns(未构造完毕不能传入)，所以必须是heap object
   std::shared_ptr<std::thread> m_pWrThread;
-  static const int sm_nBufSize = 20;   //缓冲区大小，以一条记录60个字符算，1024条记录是60KB，测试的时候设小点
+  static const int sm_nBufSize = 20;  //缓冲区大小，以一条记录60个字符算，1024条记录是60KB，测试的时候设小点
   std::vector<std::string> m_vsCurr;  //待写入缓冲，让其他线程写入日志
   std::vector<std::string> m_vsWrite; //写入日志文件的缓冲
   size_t m_nIndexC;                   //记录m_vsCurr有多少条记录
@@ -65,7 +67,26 @@ private:
   std::condition_variable m_EmCond;   //条件变量，等待待写入缓冲区被清空
   std::atomic<bool> m_bIsRun;         //原子类型，控制写日志文件线程是否继续运行
 };
+
+//记录日志的文件和对应行
 #define WHERE std::string(__FILE__) + ":" + std::to_string(__LINE__)
+
+//有点丑陋宏：获取日志智能指针并调用append
+#define _LOG MLog::GetIns()->append
+
+#define _GE MLog::GetErr
+
+#define RUNTIME_ERROR()                                 \
+  do                                                    \
+  {                                                     \
+    throw std::runtime_error(WHERE + " " + _GE(errno)); \
+  } while (0)
+
+#define THROW_EXCEPT(msg)      \
+  do                           \
+  {                            \
+    throw std::runtime_error(msg); \
+  } while (0)
 }
 
 #endif //MLOG_H
