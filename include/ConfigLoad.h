@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <iostream> //just for test
+#include <stdexcept>
 
 namespace MThttpd
 {
@@ -19,11 +20,11 @@ public:
   //在类中定义的函数隐式inline
   static const std::shared_ptr<ConfigLoad> GetIns() { return sm_pIns; } //获取实例
   ~ConfigLoad() { std::cout << "ConfigLoad destruct" << std::endl; }
-  std::string GetConfValue(const std::string &key) //根据key返回配置参数
+  std::string GetValue(const std::string &key) //根据key返回配置参数
   {
     if (m_mapConfig.count(key))
       return m_mapConfig[key];
-    return "";
+    throw std::runtime_error("No Such Value"); //TODO：换个友好的方式
   }
   ConfigLoad(const ConfigLoad &) = delete;
   ConfigLoad &operator=(const ConfigLoad &) = delete;

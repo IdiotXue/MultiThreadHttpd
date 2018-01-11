@@ -5,6 +5,8 @@
 #include <cstring>      //memset
 #include <fcntl.h>
 
+#include <iostream> //just for test
+
 using namespace MThttpd;
 using std::string;
 
@@ -17,7 +19,7 @@ Socket::Socket() : m_bWrite(false)
     m_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (m_fd == -1)
     {
-        _LOG(Level::ERROR, {WHERE, "socket() fail"});
+        _LOG(Level::ERROR, {WHERE, "socket fail"});
         RUNTIME_ERROR();
     }
     // 使服务器立即重启时，可重用bind时的地址
@@ -25,9 +27,10 @@ Socket::Socket() : m_bWrite(false)
     int ret = setsockopt(m_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     if (ret == -1)
     {
-        _LOG(Level::ERROR, {WHERE, "setsockopt() fail"});
+        _LOG(Level::ERROR, {WHERE, "setsockopt fail"});
         RUNTIME_ERROR();
     }
+    std::cout << "Socket() ok" << std::endl;
 }
 /**
  * 用已有的套接字描述符初始化
@@ -65,7 +68,7 @@ void Socket::Bind(const std::string &host, uint16_t port)
         int ret = inet_pton(AF_INET, host.c_str(), reinterpret_cast<void *>(&sIP)); //点分十进制 转化为 二进制IP地址
         if (ret == -1)
         {
-            _LOG(Level::ERROR, {WHERE, "inet_pton() fail"});
+            _LOG(Level::ERROR, {WHERE, "inet_pton fail"});
             RUNTIME_ERROR();
         }
         else if (ret == 0)
@@ -78,9 +81,10 @@ void Socket::Bind(const std::string &host, uint16_t port)
     //绑定socket,即命名
     if (::bind(m_fd, reinterpret_cast<struct sockaddr *>(&m_addr), sizeof(m_addr)))
     {
-        _LOG(Level::ERROR, {WHERE, "bind() fail"});
+        _LOG(Level::ERROR, {WHERE, "bind fail"});
         RUNTIME_ERROR();
     }
+    std::cout << "bind() ok" << std::endl;
 }
 
 /**
@@ -90,9 +94,10 @@ void Socket::Listen(int size)
 {
     if (::listen(m_fd, size))
     {
-        _LOG(Level::ERROR, {WHERE, "listen() fail"});
+        _LOG(Level::ERROR, {WHERE, "listen fail"});
         RUNTIME_ERROR();
     }
+    std::cout << "listen ok" << std::endl;
 }
 
 std::shared_ptr<Socket> Socket::Accept()

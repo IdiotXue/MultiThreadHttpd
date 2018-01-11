@@ -82,7 +82,7 @@ void MLog::WriteLog()
  */
 void MLog::init()
 {
-    sm_pIns.reset(new MLog(ConfigLoad::GetIns()->GetConfValue("logfile")));
+    sm_pIns.reset(new MLog(ConfigLoad::GetIns()->GetValue("logfile")));
     sm_pIns->m_pWrThread = std::make_shared<std::thread>(
         std::bind(&MLog::WriteLog, sm_pIns)); //绑定了唯一单例
 }
