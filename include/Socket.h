@@ -8,9 +8,9 @@
 
 namespace MThttpd
 {
-
 /**
- * 封装非阻塞读写接口，RAII封装套接字描述符创建关闭
+ * 封装非阻塞读写接口、socket基本API
+ * RAII封装套接字描述符创建关闭
  * 仅考虑IPv4
  */
 class Socket

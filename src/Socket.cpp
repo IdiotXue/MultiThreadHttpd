@@ -27,10 +27,11 @@ Socket::Socket() : m_bWrite(false)
     int ret = setsockopt(m_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     if (ret == -1)
     {
+        errno = 2;
         _LOG(Level::ERROR, {WHERE, "setsockopt fail"});
         RUNTIME_ERROR();
     }
-    std::cout << "Socket() ok" << std::endl;
+    std::cout << "sock default construct" << std::endl;
 }
 /**
  * 用已有的套接字描述符初始化
@@ -41,6 +42,7 @@ Socket::Socket(int fd, const sockaddr_in &cliAddr) : m_fd(fd), m_bWrite(false)
     m_addr.sin_family = cliAddr.sin_family;
     m_addr.sin_port = cliAddr.sin_port;
     m_addr.sin_addr.s_addr = cliAddr.sin_addr.s_addr;
+    printf("sock construct\n");
 }
 
 /**
@@ -49,6 +51,7 @@ Socket::Socket(int fd, const sockaddr_in &cliAddr) : m_fd(fd), m_bWrite(false)
 Socket::~Socket()
 {
     close(m_fd);
+    printf("Socket destruct %d\n", m_fd);
 }
 /**
  * @param host 服务器程序绑定的网卡地址
@@ -84,7 +87,6 @@ void Socket::Bind(const std::string &host, uint16_t port)
         _LOG(Level::ERROR, {WHERE, "bind fail"});
         RUNTIME_ERROR();
     }
-    std::cout << "bind() ok" << std::endl;
 }
 
 /**
@@ -97,7 +99,6 @@ void Socket::Listen(int size)
         _LOG(Level::ERROR, {WHERE, "listen fail"});
         RUNTIME_ERROR();
     }
-    std::cout << "listen ok" << std::endl;
 }
 
 std::shared_ptr<Socket> Socket::Accept()
