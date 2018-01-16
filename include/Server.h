@@ -16,6 +16,7 @@ class Server
     Server();
     ~Server();
     void start();
+    size_t ChooseTW(); //选择工作线程oo
 
   private:
     Socket m_listen; //监听socket

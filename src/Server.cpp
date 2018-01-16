@@ -1,6 +1,7 @@
 #include "Server.h"
 #include "MLog.h"
-#include <unistd.h>
+#include <unistd.h> //getpid
+#include <limits>
 
 using namespace MThttpd;
 
@@ -11,11 +12,11 @@ Server::Server() : m_listen(),
                    m_conf(ConfigLoad::GetIns()),
                    m_tPool(std::stoi(m_conf->GetValue("thread_num")))
 {
-    // _LOG(Level::INFO, {WHERE, "Server start"});    
+    _LOG(Level::INFO, {WHERE, "----------------------------------"});
     m_listen.Bind(m_conf->GetValue("host"),
                   std::stoi(m_conf->GetValue("port")));
     m_listen.Listen(std::stoi(m_conf->GetValue("listen_num")));
-    std::cout << "listen ok\n";
+    printf("server listen fd:%d\n", m_listen.GetFD());
     for (auto &tWork : m_tPool)
     {
         tWork = std::make_shared<TWork>(
@@ -36,14 +37,28 @@ Server::~Server()
     log->append(Level::INFO, {WHERE, "Server Stop"});
     log->stop();
 }
+
 void Server::start()
 {
-    printf("Server: %ld\n", std::this_thread::get_id()); //cout线程不安全
-    _LOG(Level::INFO, {WHERE, "Server start"});
+    _LOG(Level::INFO, {WHERE, "Server start", "pid:" + std::to_string(getpid())});
     // for (;;)
     for (size_t i = 0; i < 3; ++i)
     {
-        // auto sock = m_listen.Accept();
-        sleep(1);
+        printf("server: %lu\n", i);
+        auto pSock = m_listen.Accept();
+        pSock->SetNonBlock();
+        m_tPool[ChooseTW()]->AddTask(pSock);
     }
+}
+
+size_t Server::ChooseTW()
+{
+    size_t index = 0, nMin = std::numeric_limits<size_t>::max();
+    for (size_t i = 0; i < m_tPool.size(); ++i)
+        if (m_tPool[i]->GetSockSize() < nMin)
+        {
+            index = i;
+            nMin = m_tPool[i]->GetSockSize();
+        }
+    return index;
 }

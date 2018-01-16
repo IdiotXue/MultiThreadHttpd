@@ -15,23 +15,24 @@ namespace MThttpd
  */
 class Socket
 {
-  public:
-    Socket();
-    Socket(int fd, const sockaddr_in &cliAddr);
-    ~Socket();
-    void Bind(const std::string &host, uint16_t port);
-    void Listen(int size);
-    std::shared_ptr<Socket> Accept();
-    bool SetNonBlock();          //设置socket为非阻塞模式
-    int GetFD() { return m_fd; } //仅在epoll_ctl等必须的场合使用
+public:
+  Socket();
+  Socket(int fd, const sockaddr_in &cliAddr);
+  ~Socket();
+  void Bind(const std::string &host, uint16_t port);
+  void Listen(int size);
+  std::shared_ptr<Socket> Accept();
+  bool SetNonBlock();                       //设置socket为非阻塞模式
+  int GetFD() { return m_fd; }              //仅在epoll_ctl等必须的场合使用
+  bool NeedWr() const { return m_bWrite; }; //返回套接字上是否有数据待写
 
-    Socket(const Socket &) = delete;
-    const Socket &operator=(const Socket &) = delete;
+  Socket(const Socket &) = delete;
+  const Socket &operator=(const Socket &) = delete;
 
-  private:
-    int m_fd;                  //socket描述符
-    bool m_bWrite;             //记录是否有数据要写
-    struct sockaddr_in m_addr; //IPv4域下，保存服务器或连接的客户端socket地址
+private:
+  int m_fd;                  //socket描述符
+  bool m_bWrite;             //记录是否有数据要写
+  struct sockaddr_in m_addr; //IPv4域下，保存服务器或连接的客户端socket地址
 };
 }
 

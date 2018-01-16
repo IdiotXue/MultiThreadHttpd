@@ -1,6 +1,6 @@
 #include "Socket.h"
 #include "MLog.h"
-#include <sys/socket.h> //socket,bind,listen,accept,setsockopt
+#include <sys/socket.h> //socket,bind,listen,accept,setsockopt,recv
 #include <unistd.h>     //close
 #include <cstring>      //memset
 #include <fcntl.h>
@@ -42,7 +42,7 @@ Socket::Socket(int fd, const sockaddr_in &cliAddr) : m_fd(fd), m_bWrite(false)
     m_addr.sin_family = cliAddr.sin_family;
     m_addr.sin_port = cliAddr.sin_port;
     m_addr.sin_addr.s_addr = cliAddr.sin_addr.s_addr;
-    printf("sock construct\n");
+    printf("sock construct %d\n", m_fd);
 }
 
 /**
@@ -51,6 +51,9 @@ Socket::Socket(int fd, const sockaddr_in &cliAddr) : m_fd(fd), m_bWrite(false)
 Socket::~Socket()
 {
     close(m_fd);
+    char buf[20]; //存点分十进制IP地址
+    inet_ntop(AF_INET, &m_addr.sin_addr, buf, sizeof(buf));
+    _LOG(Level::INFO, {"client:" + string(buf), "port:" + std::to_string(ntohs(m_addr.sin_port)), "close"});
     printf("Socket destruct %d\n", m_fd);
 }
 /**
@@ -115,7 +118,7 @@ std::shared_ptr<Socket> Socket::Accept()
     char buf[20]; //存点分十进制IP地址
     inet_ntop(AF_INET, &cliAddr.sin_addr, buf, sizeof(buf));
     //每个连接的客户端地址和端口都记录到日志
-    _LOG(Level::INFO, {"client:" + string(buf), "port:" + std::to_string(ntohs(cliAddr.sin_port))});
+    _LOG(Level::INFO, {"client:" + string(buf), "port:" + std::to_string(ntohs(cliAddr.sin_port)), "connect"});
     return std::make_shared<Socket>(nConnFd, cliAddr);
 }
 

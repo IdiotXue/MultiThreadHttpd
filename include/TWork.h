@@ -6,6 +6,8 @@
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
+#include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include "Socket.h"
 
 namespace MThttpd
@@ -30,11 +32,12 @@ class TWork : public std::enable_shared_from_this<TWork>
     explicit TWork(int epoNum);
     virtual ~TWork(); //有继承，所以声明为虚析构
 
-    void start();                                //由主线程调用开启工作线程
-    void stop();                                 //由主线程调用终止工作线程
-    void IOLoop();                               //event loop等待socket消息
-    void AddTask(std::shared_ptr<Socket> pSock); //主线程添加任务给任务队列
-    void GetTask();                              //工作线程获取任务
+    void start();                                           //由主线程调用开启工作线程
+    void stop();                                            //由主线程调用终止工作线程
+    void IOLoop();                                          //event loop等待socket消息
+    void AddTask(std::shared_ptr<Socket> pSock);            //主线程添加任务给任务队列
+    void GetTask();                                         //工作线程获取任务
+    size_t GetSockSize() const { return m_Fd2Sock.size(); } //获取工作线程维持的连接数
 
     TWork(const TWork &) = delete;
     const TWork &operator=(const TWork &) = delete;
@@ -46,7 +49,16 @@ class TWork : public std::enable_shared_from_this<TWork>
     std::unordered_map<int, std::shared_ptr<Socket>> m_Fd2Sock;
     std::mutex m_mutex;         //分配和读取任务时，对任务队列加锁
     std::atomic<bool> m_bIsRun; //原子类型，控制工作线程是否继续运行
-    int m_eFd;                  //epoll_create返回的FD
+    int m_eventFd;              //线程间通信用，用于主线程添加任务后通知对应工作线程，以类似计数器的方式工作
+
+    //epoll相关参数
+    int m_nMaxEvents; //最大监听数目
+    //epoll_wait时使用的数组，unique_ptr对动态数组提供了支持：
+    //（1）可以下标操作（2）能自动调用delete[]；
+    //相比之下，shared_ptr在这方面就弱了（没有提供这两个支持）
+    std::unique_ptr<struct epoll_event[]> m_upEvents;
+    int m_epFd;              //epoll_create返回的FD
+    struct epoll_event m_ev; //GetTask函数中用于添加Fd到epoll
 };
 }
 
