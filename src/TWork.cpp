@@ -65,7 +65,8 @@ void TWork::stop()
         m_pWT->join();
 }
 /**
- * event loop等待socket消息
+ * event loop等待socket消息和主线程通知用的eventfd
+ * TODO：处理EPOLLERR和EPOLLRDHUP
  */
 void TWork::IOLoop()
 {
@@ -91,7 +92,7 @@ void TWork::IOLoop()
                 _LOG(Level::WARN, {WHERE, "fd not in m_Fd2Sock"});
                 continue;
             }
-            if ((fd == m_eventFd) && (m_upEvents[i].events & EPOLLIN))
+            if ((fd == m_eventFd) && (m_upEvents[i].events & EPOLLIN)) //添加任务或即将结束线程
             {
                 printf("Twork %d, eventfd EPOLLIN\n", m_eventFd);
                 GetTask();
@@ -100,17 +101,12 @@ void TWork::IOLoop()
             if (m_upEvents[i].events & EPOLLIN)
             {
                 printf("fd:%d EPOLLIN\n", fd);
-                char buf[1024];
-                char buf2[100];
-                int nRead = read(fd, buf, sizeof(buf));
-                int nRead2 = nRead;
-                while (nRead2 > 0)
+                int nRead = iter->second->Read();
+                if (nRead < 0)
                 {
-                    nRead2 = read(fd, buf2, sizeof(buf2));
-                }
-                printf("Twork %d, read data %d\n", m_eventFd, nRead2);
-                if (nRead2 < 0)
                     printf("errno:%d,%s", errno, _GE(errno).c_str());
+                    continue;
+                }
                 if (nRead == 0)
                 {
                     printf("close socket msg size %d,Sock count:%lu\n", nRead, iter->second.use_count());
@@ -119,39 +115,11 @@ void TWork::IOLoop()
                     m_Fd2Sock.erase(fd);
                     continue;
                 }
-                if (nRead == -1)
-                {
-                    printf("read fail %d\n", nRead);
-                    continue;
-                }
-                int nWrite = write(fd, buf, nRead);
-                printf("Twork %d, write data %d\n", m_eventFd, nWrite);
-                // int nRead = -1;
-                // uint8_t buf[1024];
-                // std::string msg = "";
-                // do
-                // {
-                //     memset(buf, 0, sizeof(buf));
-                //     nRead = recv(fd, buf, sizeof(buf), MSG_DONTWAIT);
-                //     buf[nRead] = '\0';
-                //     msg += std::string(buf);
-                // } while (nRead > 0);
-                // if (nRead == 0) //读数据为0，即断开连接
-                // {
-                //     printf("close socket msg size %ud", msg.size());
-                //     m_Fd2Sock.erase(fd);
-                //     continue;
-                // }
-                // else if ((nRead == -1) && (errno != EAGAIN) && (errno != EWOULDBLOCK))
-                // {
-                //     _LOG(Level::WARN, {WHERE, "read fail"});
-                //     //关闭该连接
-                // }
-                // std::unique<char[]> wrBuf(new char[msg.size() + 1]);
-                // for (size_t i = 0; i < wrBuf.size(); ++i)
-                //     wrBuf[i] = msg[i];
-                // wrBuf[msg.size()] = '\0';
-                // write(fd, wrBuf.get(), msg.size());
+                auto pSock = iter->second;
+                std::string msg(pSock->GetRdPtr(), pSock->RdBufSize());
+                pSock->NotifyRdBuf(msg.size()); //此处仅仅为Echo测试
+                size_t nWrite = pSock->Write(msg);
+                printf("Twork %d, write data %lu\n", m_eventFd, nWrite);
             }
             //注意ET且同时监听IN和OUT时，有EPOLLIN（不知是否需要写缓冲不满）就会有EPOLLOUT
             //只要判断是否真有数据可写就行
@@ -164,7 +132,7 @@ void TWork::IOLoop()
     }
 }
 /**
- * 主线程accept后，添加任务（Socket）到某个线程的队列
+ * 主线程accept后，添加任务（Socket）到某个线程的队列，并用eventfd通知对应线程
  */
 void TWork::AddTask(std::shared_ptr<Socket> pSock)
 {
@@ -185,7 +153,7 @@ void TWork::AddTask(std::shared_ptr<Socket> pSock)
     }
 }
 /**
- * 获取任务
+ * 获取任务，并将fd添加到epoll和m_Fd2Sock
  */
 void TWork::GetTask()
 {

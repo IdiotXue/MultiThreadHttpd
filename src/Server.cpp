@@ -33,9 +33,6 @@ Server::~Server()
 {
     for (const auto &pTWork : m_tPool)
         pTWork->stop();
-    auto log = MLog::GetIns();
-    log->append(Level::INFO, {WHERE, "Server Stop"});
-    log->stop();
 }
 
 void Server::start()

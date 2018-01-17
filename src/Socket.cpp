@@ -13,7 +13,7 @@ using std::string;
 /**
  * 调用socket函数创建TCP套接字
  */
-Socket::Socket() : m_bWrite(false)
+Socket::Socket() : m_bWrite(false), m_rdBuf(sm_nBufSize), m_wrBuf(sm_nBufSize)
 {
     //创建未命名服务器socket
     m_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -37,7 +37,8 @@ Socket::Socket() : m_bWrite(false)
  * 用已有的套接字描述符初始化
  * accept中用
  */
-Socket::Socket(int fd, const sockaddr_in &cliAddr) : m_fd(fd), m_bWrite(false)
+Socket::Socket(int fd, const sockaddr_in &cliAddr)
+    : m_fd(fd), m_bWrite(false), m_rdBuf(sm_nBufSize), m_wrBuf(sm_nBufSize)
 {
     m_addr.sin_family = cliAddr.sin_family;
     m_addr.sin_port = cliAddr.sin_port;
@@ -134,4 +135,46 @@ bool Socket::SetNonBlock()
     if (fcntl(m_fd, F_SETFL, flag) == -1)
         return false;
     return true;
+}
+/**
+ * 非阻塞读取socket数据，保存于Socket对象的读缓冲区
+ * @return 0为连接关闭，1为已经读完能读的数据，-1为read出错
+ */
+int Socket::Read()
+{
+    int ret = 0;
+    ret = recv(m_fd, m_cTmpBuf, sizeof(m_cTmpBuf), MSG_DONTWAIT);
+    while (ret > 0)
+    {
+        m_rdBuf.append(m_cTmpBuf, ret);
+        ret = recv(m_fd, m_cTmpBuf, sizeof(m_cTmpBuf), MSG_DONTWAIT);
+    }
+    if (ret == 0) //连接关闭
+        return 0;
+    else if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+        return 1;
+    _LOG(Level::WARN, {WHERE, _GE(errno), "read fail"});
+    return -1;
+}
+
+/**
+ * 非阻塞方式将Socket对象的写缓冲区数据写入socket
+ * @return 返回写入了多少字节
+ */
+size_t Socket::_Write()
+{
+    int ret = 0;
+    size_t oriSize = m_wrBuf.size();
+    ret = ::write(m_fd, m_wrBuf.GetPtr(), m_wrBuf.size());
+    while (ret > 0)
+    {
+        m_wrBuf.discard(ret); //已写入ret字节，可以去掉
+        if (!m_wrBuf.size())  //若已经写完，终止循环
+            break;
+        ret = ::write(m_fd, m_wrBuf.GetPtr(), m_wrBuf.size());
+    }
+    if (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+        _LOG(Level::WARN, {WHERE, _GE(errno), "write fail"});
+    m_bWrite = !!m_wrBuf.size();
+    return oriSize - m_wrBuf.size();
 }

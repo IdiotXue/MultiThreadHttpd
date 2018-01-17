@@ -5,7 +5,11 @@
 using namespace MThttpd;
 int main(int argc, const char *agrv[])
 {
-    Server server;
-    server.start();
+    {
+        Server server;
+        server.start();
+    }
+    _LOG(Level::INFO, {WHERE, "Server Stop"});
+    STOP_LOG();
     return 0;
 }

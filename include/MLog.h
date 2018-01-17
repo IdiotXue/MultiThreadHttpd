@@ -74,6 +74,12 @@ class MLog
 //有点丑陋宏：获取日志智能指针并调用append
 #define _LOG MLog::GetIns()->append
 
+#define STOP_LOG()              \
+    do                          \
+    {                           \
+        MLog::GetIns()->stop(); \
+    } while (0)
+
 #define _GE MLog::GetErr
 
 #define RUNTIME_ERROR()                                     \
