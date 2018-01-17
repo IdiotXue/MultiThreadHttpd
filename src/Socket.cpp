@@ -113,8 +113,13 @@ std::shared_ptr<Socket> Socket::Accept()
     int nConnFd = ::accept(m_fd, reinterpret_cast<struct sockaddr *>(&cliAddr), &nAddrLen);
     if (nConnFd == -1)
     {
-        _LOG(Level::WARN, {_GE(errno), WHERE, "accept fail"}); //有些请求每收到为WARN
-        THROW_EXCEPT("accept fail");                           //希望调用处捕获
+        if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+        {
+            _LOG(Level::WARN, {_GE(errno), WHERE, "accept fail"}); //有些请求每收到为WARN
+            THROW_EXCEPT("accept fail");                           //希望调用处捕获
+        }
+        // printf("Server accept %d,%d,%s\n", nConnFd, errno, _GE(errno).c_str());
+        return std::shared_ptr<Socket>(); //返回空智能指针
     }
     char buf[20]; //存点分十进制IP地址
     inet_ntop(AF_INET, &cliAddr.sin_addr, buf, sizeof(buf));

@@ -8,7 +8,7 @@
 using namespace MThttpd;
 
 /**
- * 创建监听套接字，创建并开启工作线程
+ * 创建监听套接字，创建并开启工作线程，创建signalfd
  */
 Server::Server() : m_bIsRun(true),
                    m_listen(),
@@ -31,9 +31,11 @@ Server::Server() : m_bIsRun(true),
     _LOG(Level::INFO, {WHERE, "----------------------------------"});
     _LOG(Level::INFO, {WHERE, "Server start", "pid:" + std::to_string(getpid())});
     //初始化listen socket，bind，listen
+
     m_listen.Bind(m_conf->GetValue("host"),
                   std::stoi(m_conf->GetValue("port")));
     m_listen.Listen(std::stoi(m_conf->GetValue("listen_num")));
+    m_listen.SetNonBlock();
     printf("server listen fd:%d\n", m_listen.GetFD());
 
     //初始化线程池（工作线程）
@@ -71,8 +73,7 @@ Server::Server() : m_bIsRun(true),
 }
 
 /**
- * 服务器终止时先关闭所有工作线程
- * 再关闭写日志线程，使所有缓冲区的日志记录写入
+ * 服务器终止时关闭所有工作线程
  */
 Server::~Server()
 {
@@ -98,8 +99,12 @@ void Server::start()
             if (fd == m_listen.GetFD() && (m_upEvents[i].events & EPOLLIN))
             {
                 auto pSock = m_listen.Accept();
-                pSock->SetNonBlock();
-                m_tPool[ChooseTW()]->AddTask(pSock);
+                while (pSock) //当没有连接时pSock为空智能指针
+                {
+                    pSock->SetNonBlock();
+                    m_tPool[ChooseTW()]->AddTask(pSock);
+                    pSock = m_listen.Accept();
+                }
             }
             else if (fd == m_sigFd && (m_upEvents[i].events & EPOLLIN))
             {

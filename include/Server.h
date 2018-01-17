@@ -10,6 +10,9 @@ namespace MThttpd
 {
 /**
  * RAII封装创建启动和结束线程池
+ * （1）服务器总开关；创建、开启、关闭线程池（工作线程）
+ * （2）主线程epoll 于listenfd和signalfd，accept后选择并分配给工作线程或收到INT平稳结束程序
+ * （3）拥有handler成员函数处理请求
  */
 class Server
 {
