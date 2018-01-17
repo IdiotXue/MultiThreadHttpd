@@ -76,8 +76,6 @@ void TWork::IOLoop()
     printf("Twork in IOLoop:%d,%d\n", m_eventFd, m_epFd);
     while (m_bIsRun)
     {
-
-        // printf("work: %ld\n", m_pWT->get_id()); //cout线程不安全
         //参数依次为：epoll创建的专用fd，回传待处理事件的数组，每次处理的最大事件数，timeout -1为不确定或永久阻塞
         nFdNum = epoll_wait(m_epFd, m_upEvents.get(), m_nMaxEvents, -1);
         if (nFdNum == -1)
@@ -109,7 +107,7 @@ void TWork::IOLoop()
                 }
                 if (nRead == 0)
                 {
-                    printf("close socket msg size %d,Sock count:%lu\n", nRead, iter->second.use_count());
+                    printf("fd:%d close msg size %d,Sock count:%lu\n", fd, nRead, iter->second.use_count());
                     //epoll文档：当指向同一file description（可被dup，fcntl，fork复制）的file descriptor被全部close时，会自动在epoll中移除
                     //目前的程序可以确保：此处erase，使智能指针析构指向的socket，即可close唯一的fd，自动移出epoll
                     m_Fd2Sock.erase(fd);
@@ -126,7 +124,7 @@ void TWork::IOLoop()
             if (m_upEvents[i].events & EPOLLOUT)
             {
                 if (!iter->second->NeedWr())
-                    printf("EPOLLOUT but no data to write\n");
+                    printf("fd:%d EPOLLOUT but no data to write\n", fd);
             }
         }
     }
