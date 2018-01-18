@@ -35,18 +35,17 @@ public:
   const char *GetRdPtr() const { return m_rdBuf.GetPtr(); }
 
   bool NeedWr() const { return m_bWrite; }; //返回套接字上是否有数据待写
-  size_t Write(const std::string &data)     //外部处理完Request后传入Response
+  size_t Append(const std::string &data)    //外部处理完Request后将Response加入
   {
     m_wrBuf.append(data);
-    return _Write();
+    return Write();
   }
+  size_t Write(); //发送数据
 
   Socket(const Socket &) = delete;
   const Socket &operator=(const Socket &) = delete;
 
 private:
-  size_t _Write();
-
 private:
   int m_fd;                               //socket描述符
   bool m_bWrite;                          //记录是否有数据要写

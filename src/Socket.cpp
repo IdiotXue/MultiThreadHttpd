@@ -166,7 +166,7 @@ int Socket::Read()
  * 非阻塞方式将Socket对象的写缓冲区数据写入socket
  * @return 返回写入了多少字节
  */
-size_t Socket::_Write()
+size_t Socket::Write()
 {
     int ret = 0;
     size_t oriSize = m_wrBuf.size();

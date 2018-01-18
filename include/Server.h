@@ -21,6 +21,10 @@ class Server
     ~Server();
     void start();
     size_t ChooseTW(); //选择工作线程oo
+    static int Handler(std::shared_ptr<Socket> pSock);
+
+    Server(const Server &) = delete;
+    const Server &operator=(const Server &) = delete;
 
   private:
     int m_sigFd; //signalfd，以file destriptor方式操作信号

@@ -5,8 +5,11 @@
 
 using namespace MThttpd;
 
-TWork::TWork(int epoNum) : m_bIsRun(true), m_nMaxEvents(epoNum),
-                           m_upEvents(new struct epoll_event[m_nMaxEvents])
+TWork::TWork(int epoNum, TaskHandler handler)
+    // TWork::TWork(int epoNum)
+    : m_bIsRun(true), m_nMaxEvents(epoNum),
+      m_upEvents(new struct epoll_event[m_nMaxEvents]),
+      m_handler(handler)
 {
     m_eventFd = eventfd(0, EFD_NONBLOCK); //直接设置非阻塞，不用fcntl
     m_epFd = epoll_create(m_nMaxEvents);  //epoNum为epoll监听的数目，m_upEvents的大小不应超过这个数目
@@ -35,10 +38,11 @@ TWork::~TWork()
 }
 
 /**
- * 开启工作线程，进入event loop
+ * 开启工作线程，进入event loop，启动线程时放入处理请求用的TaskHandler
  */
 void TWork::start()
 {
+    // m_handler = handler;
     m_pWT = std::make_shared<std::thread>(
         std::bind(&TWork::IOLoop, shared_from_this()));
 }
@@ -85,11 +89,6 @@ void TWork::IOLoop()
         {
             fd = m_upEvents[i].data.fd;
             iter = m_Fd2Sock.find(fd);
-            if (iter == m_Fd2Sock.end() && fd != m_eventFd) //这应该是不可能出现的，此处仅为开发阶段确认
-            {
-                _LOG(Level::WARN, {WHERE, "fd not in m_Fd2Sock"});
-                continue;
-            }
             if ((fd == m_eventFd) && (m_upEvents[i].events & EPOLLIN)) //添加任务或即将结束线程
             {
                 printf("Twork %d, eventfd EPOLLIN\n", m_eventFd);
@@ -99,33 +98,24 @@ void TWork::IOLoop()
             if (m_upEvents[i].events & EPOLLIN)
             {
                 printf("fd:%d EPOLLIN\n", fd);
-                int nRead = iter->second->Read();
-                if (nRead < 0)
+                if (m_handler(iter->second) == 0)
                 {
-                    printf("errno:%d,%s", errno, _GE(errno).c_str());
-                    continue;
-                }
-                if (nRead == 0)
-                {
-                    printf("fd:%d close msg size %d,Sock count:%lu\n", fd, nRead, iter->second.use_count());
+                    printf("fd:%d close, Sock count:%lu\n", fd, iter->second.use_count());
                     //epoll文档：当指向同一file description（可被dup，fcntl，fork复制）的file descriptor被全部close时，会自动在epoll中移除
                     //目前的程序可以确保：此处erase，使智能指针析构指向的socket，即可close唯一的fd，自动移出epoll
                     m_Fd2Sock.erase(fd);
                     continue;
                 }
-                auto pSock = iter->second;
-                std::string msg(pSock->GetRdPtr(), pSock->RdBufSize());
-                pSock->NotifyRdBuf(msg.size()); //此处仅仅为Echo测试
-                size_t nWrite = pSock->Write(msg);
-                printf("Twork %d, write data %lu\n", m_eventFd, nWrite);
             }
-            //注意ET且同时监听IN和OUT时，有EPOLLIN（不知是否需要写缓冲不满）就会有EPOLLOUT
-            //只要判断是否真有数据可写就行
+            //数据过多写满TCP缓冲区会EAGAIN，当恢复可写时会触发EPOLLOUT
+            //另外注意：ET且同时监听IN和OUT时，有EPOLLIN（不知是否需要写缓冲不满）就会有EPOLLOUT
+            //所以判断是否有数据可写
             if (m_upEvents[i].events & EPOLLOUT)
-            {
-                if (!iter->second->NeedWr())
-                    printf("fd:%d EPOLLOUT but no data to write\n", fd);
-            }
+                if (iter->second->NeedWr())
+                {
+                    size_t nWrite = iter->second->Write();
+                    printf("fd:%d EPOLLOUT write data %lu\n", fd, nWrite);
+                }
         }
     }
 }

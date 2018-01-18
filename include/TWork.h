@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <functional>
 #include "Socket.h"
 
 namespace MThttpd
@@ -29,7 +30,10 @@ namespace MThttpd
 class TWork : public std::enable_shared_from_this<TWork>
 {
   public:
-    explicit TWork(int epoNum);
+    typedef std::function<int(std::shared_ptr<Socket>)> TaskHandler;
+
+    explicit TWork(int epoNum, TaskHandler handler);
+    // explicit TWork(int epoNum);
     virtual ~TWork(); //有继承，所以声明为虚析构
 
     void start();                                           //由主线程调用开启工作线程
@@ -59,6 +63,8 @@ class TWork : public std::enable_shared_from_this<TWork>
     std::unique_ptr<struct epoll_event[]> m_upEvents;
     int m_epFd;              //epoll_create返回的FD
     struct epoll_event m_ev; //GetTask函数中用于添加Fd到epoll
+
+    TaskHandler m_handler; //处理请求的回调函数，TODO:应该有更合理或者可变的实现方式
 };
 }
 

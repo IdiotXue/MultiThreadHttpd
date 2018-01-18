@@ -8,7 +8,7 @@
 using namespace MThttpd;
 
 /**
- * 创建监听套接字，创建并开启工作线程，创建signalfd
+ * 创建监听套接字，创建工作线程，创建signalfd
  */
 Server::Server() : m_bIsRun(true),
                    m_listen(),
@@ -42,7 +42,7 @@ Server::Server() : m_bIsRun(true),
     for (auto &tWork : m_tPool)
     {
         tWork = std::make_shared<TWork>(
-            std::stoi(m_conf->GetValue("epoll_num")));
+            std::stoi(m_conf->GetValue("epoll_num")), &Server::Handler);
         tWork->start();
     }
 
@@ -82,7 +82,9 @@ Server::~Server()
     for (const auto &pTWork : m_tPool)
         pTWork->stop();
 }
-
+/**
+ * 启动服务器：进入epoll IO循环
+ */
 void Server::start()
 {
     int nFdNum;
@@ -96,7 +98,7 @@ void Server::start()
         for (int i = 0; i < nFdNum; ++i)
         {
             fd = m_upEvents[i].data.fd;
-            if (fd == m_listen.GetFD() && (m_upEvents[i].events & EPOLLIN))
+            if (fd == m_listen.GetFD() && (m_upEvents[i].events & EPOLLIN)) //监听socket的accept
             {
                 auto pSock = m_listen.Accept();
                 while (pSock) //当没有连接时pSock为空智能指针
@@ -106,7 +108,7 @@ void Server::start()
                     pSock = m_listen.Accept();
                 }
             }
-            else if (fd == m_sigFd && (m_upEvents[i].events & EPOLLIN))
+            else if (fd == m_sigFd && (m_upEvents[i].events & EPOLLIN)) //收到SIGINT信号，平稳终止服务程序
             {
                 struct signalfd_siginfo fdsi;
                 ssize_t ret = read(m_sigFd, &fdsi, sizeof(struct signalfd_siginfo));
@@ -127,7 +129,9 @@ void Server::start()
         }
     }
 }
-
+/**
+ * 目前的规则：选择维持链接少的工作线程
+ */
 size_t Server::ChooseTW()
 {
     size_t index = 0, nMin = std::numeric_limits<size_t>::max();
@@ -138,4 +142,25 @@ size_t Server::ChooseTW()
             nMin = m_tPool[i]->GetSockSize();
         }
     return index;
+}
+/**
+ * 传入工作线程中的回调函数，用于处理请求
+ * 工作线程无需直到如何处理，一切由Server负责统筹
+ * @return 0为连接关闭，1为成功处理，-1为读取数据出错
+ */
+int Server::Handler(std::shared_ptr<Socket> pSock)
+{
+    int nRead = pSock->Read();
+    if (nRead == 0) //连接关闭
+        return 0;
+    if (nRead < 0)
+    {
+        _LOG(Level::WARN, {WHERE, _GE(errno), "read fail"});
+        return -1;
+    }
+    std::string msg(pSock->GetRdPtr(), pSock->RdBufSize());
+    pSock->NotifyRdBuf(msg.size()); //此处仅仅为Echo测试
+    size_t nWrite = pSock->Append(msg);
+    printf("Twork write data %lu\n", nWrite);
+    return 1;
 }
