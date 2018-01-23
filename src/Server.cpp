@@ -169,10 +169,7 @@ int Server::Handler(std::shared_ptr<Socket> pSock)
             request.Response();
         }
         else
-        {
-            printf("parse fail.\n");
-            request.BadRequest();
-        }
+            request.RequestError();
     }
 
     /* //Echo：直接返回
