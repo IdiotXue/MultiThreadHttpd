@@ -41,6 +41,7 @@ public:
     return Write();
   }
   size_t Write(); //发送数据
+  const std::string &GetAddr() { return m_stCliAddr; }
 
   Socket(const Socket &) = delete;
   const Socket &operator=(const Socket &) = delete;
@@ -49,6 +50,7 @@ private:
 private:
   int m_fd;                               //socket描述符
   bool m_bWrite;                          //记录是否有数据要写
+  std::string m_stCliAddr;                //服务器地址
   struct sockaddr_in m_addr;              //IPv4域下，保存服务器或连接的客户端socket地址
   static const size_t sm_nBufSize = 1024; //初始时给每个Socket分配1KB的读和写缓冲
   char m_cTmpBuf[sm_nBufSize];            //仅用于recv从内核复制数据到用户空间，固定大小1KB

@@ -1,9 +1,10 @@
-#include "Server.h"
-#include "MLog.h"
 #include <unistd.h>       //getpid
 #include <sys/signalfd.h> //signalfd_siginfo
 #include <limits>
 #include <signal.h>
+#include "Server.h"
+#include "MLog.h"
+#include "Request.h"
 
 using namespace MThttpd;
 
@@ -158,9 +159,26 @@ int Server::Handler(std::shared_ptr<Socket> pSock)
         _LOG(Level::WARN, {WHERE, _GE(errno), "read fail"});
         return -1;
     }
+    printf("Twork read data %d\n", nRead);
+    Request request(pSock);
+    while (request.GetReq()) //循环处理每一个，直到没有一个完整的请求为止
+    {
+        if (request.Parse())
+        {
+            printf("parse success.\n");
+            request.Response();
+        }
+        else
+        {
+            printf("parse fail.\n");
+            request.BadRequest();
+        }
+    }
+
+    /* //Echo：直接返回
     std::string msg(pSock->GetRdPtr(), pSock->RdBufSize());
     pSock->NotifyRdBuf(msg.size()); //此处仅仅为Echo测试
     size_t nWrite = pSock->Append(msg);
-    printf("Twork write data %lu\n", nWrite);
+    printf("Twork write data %lu\n", nWrite); */
     return 1;
 }

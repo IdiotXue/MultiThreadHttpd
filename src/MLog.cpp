@@ -12,6 +12,7 @@ std::shared_ptr<MLog> MLog::sm_pIns;               //定义但没有初始化
 
 MLog::~MLog()
 {
+    m_fOut.close();
     std::cout << "MLog destruct" << std::endl; //just for test
 }
 
@@ -148,6 +149,9 @@ void MLog::stop()
     m_WrCond.notify_one(); //只有一个写日志线程
     if (m_pWrThread->joinable())
         m_pWrThread->join();
+    printf("MLog Curr size:%lu, Write size:%lu\n", m_nIndexC, m_nIndexW);
+    printf("MLog Curr size:%lu, Write size:%lu\n", m_vsCurr.size(), m_vsWrite.size());
+    printf("MLog use count:%lu\n", sm_pIns.use_count());
 }
 /**
  * 解析errno

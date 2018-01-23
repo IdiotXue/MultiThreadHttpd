@@ -13,7 +13,7 @@ using std::string;
 /**
  * 调用socket函数创建TCP套接字
  */
-Socket::Socket() : m_bWrite(false), m_rdBuf(sm_nBufSize), m_wrBuf(sm_nBufSize)
+Socket::Socket() : m_bWrite(false), m_stCliAddr(""), m_rdBuf(sm_nBufSize), m_wrBuf(sm_nBufSize)
 {
     //创建未命名服务器socket
     m_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -43,6 +43,9 @@ Socket::Socket(int fd, const sockaddr_in &cliAddr)
     m_addr.sin_family = cliAddr.sin_family;
     m_addr.sin_port = cliAddr.sin_port;
     m_addr.sin_addr.s_addr = cliAddr.sin_addr.s_addr;
+    char buf[20]; //存点分十进制IP地址
+    inet_ntop(AF_INET, &m_addr.sin_addr, buf, sizeof(buf));
+    m_stCliAddr = "client:" + string(buf) + " port:" + std::to_string(ntohs(m_addr.sin_port));
     printf("sock construct %d\n", m_fd);
 }
 
@@ -52,9 +55,7 @@ Socket::Socket(int fd, const sockaddr_in &cliAddr)
 Socket::~Socket()
 {
     close(m_fd);
-    char buf[20]; //存点分十进制IP地址
-    inet_ntop(AF_INET, &m_addr.sin_addr, buf, sizeof(buf));
-    _LOG(Level::INFO, {"client:" + string(buf), "port:" + std::to_string(ntohs(m_addr.sin_port)), "close"});
+    _LOG(Level::INFO, {m_stCliAddr, "close"});
     printf("Socket destruct %d\n", m_fd);
 }
 /**
@@ -85,6 +86,10 @@ void Socket::Bind(const std::string &host, uint16_t port)
         }
         m_addr.sin_addr.s_addr = sIP.s_addr;
     }
+    char buf[20]; //存点分十进制IP地址
+    inet_ntop(AF_INET, &m_addr.sin_addr, buf, sizeof(buf));
+    m_stCliAddr = "client:" + string(buf) + " port:" + std::to_string(ntohs(m_addr.sin_port));
+
     //绑定socket,即命名
     if (::bind(m_fd, reinterpret_cast<struct sockaddr *>(&m_addr), sizeof(m_addr)))
     {
@@ -163,7 +168,7 @@ int Socket::Read()
 }
 
 /**
- * 非阻塞方式将Socket对象的写缓冲区数据写入socket
+ * 非阻塞方式将Socket对象的写缓冲区数据写入socket，有需要再改成用send
  * @return 返回写入了多少字节
  */
 size_t Socket::Write()
