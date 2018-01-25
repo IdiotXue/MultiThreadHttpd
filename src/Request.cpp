@@ -326,14 +326,23 @@ void Request::_ExecCgi(const string &path)
     {
         close(fdCgiIn[0]);
         close(fdCgiOut[1]);
+        //post请求由子进程设置CONTENT_LENGTH环境变量，CGI程序根据该长度信息，读取主进程传递的HTTP请求主体
         if (m_method == Method::POST)
-            write(fdCgiIn[1], m_stQuery.c_str(), m_stQuery.size()); //阻塞写
-        char buf[4096];                                             //pipe buf的大小一般为4096bytes
-        int ret = read(fdCgiOut[0], buf, sizeof(buf));              //阻塞读
+        {
+            write(fdCgiIn[1], m_stQuery.c_str(), m_stQuery.size()); //阻塞写，写完返回，不用等待另一端读
+            printf("post write query %lu\n", m_stQuery.size());
+        }
+        char buf[4096];                                //pipe buf的大小一般为4096bytes
+        int ret = read(fdCgiOut[0], buf, sizeof(buf)); //阻塞读
         //fdCgiOut写端关闭时会返回0,此处相当于等待子进程执行完毕，确保所有的输出都放入stRespon
         while (ret > 0)
         {
             stRespon += string(buf, ret);
+            if (stRespon.size() > 1024 * 1024) //待写数据大于1MB
+            {
+                m_pSock->Append(stRespon);
+                stRespon = "";
+            }
             ret = read(fdCgiOut[0], buf, sizeof(buf));
         }
         close(fdCgiIn[1]);
@@ -347,7 +356,8 @@ void Request::_ExecCgi(const string &path)
             _LOG(Level::WARN, {m_pSock->GetAddr(), WHERE, "child execl() fail"});
             return;
         }
-        m_pSock->Append(stRespon);
+        if (stRespon.size() > 0) //子进程不出错才能到这里
+            m_pSock->Append(stRespon);
         _LOG(Level::INFO, {m_pSock->GetAddr(), "ExecCgi:" + path});
     }
 }

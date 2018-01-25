@@ -1,14 +1,22 @@
+<!DOCTYPE html>
 <html>
 <title>Index</title>
 
 <body>
-    <p>Welcome to EnergyX's web server.</p>
-    <h1>CGI demo</h1>
-    <form action="color.cgi" method="POST">
-        Enter a color:
-        <input type="text" name="color">
-        <input type="submit">
-    </form>
+    <h1>Welcome to EnergyX's Http Server.</h1>
+    <h2>首页</h2>
+    <p>
+        <a href="/get_query.html">提交GET请求的页面</a>
+    </p>
+    <p>
+        <a href="/post_query.html">提交POST请求的页面</a>
+    </p>
+    <p>
+        <a href="/envir.py?name=abc&token=123">打印环境变量的页面</a>
+    </p>
+    <p>
+        <a href="/hello.py">单纯打印HTML页面的CGI程序</a>
+    </p>
 </body>
 
 </html>
