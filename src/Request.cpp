@@ -251,9 +251,11 @@ void Request::_SendFile(const string &file)
  * （2）fork和exec之间只能调用异步信号安全的函数，或者可重入的线程安全的函数，man 7 signal中
  *      指出了哪些是异步信号安全的，除此之外的系统调用或库函数都不应被调用。然而下面的做法还是调
  *      用了putenv（其实现中调用了malloc）设置CGI环境变量
- *      TODO：寻找异步信号安全的设置环境变量的方法，不确定execle()传入环境表是否能解决
- * TODO：一个合理的做法可以是Fastcgi的实现机制：有另一个专门负责执行CGI的程序（进程池）web server与CGI程序之间
- *      用socket（UNIX域或INET域都行）传递需要设置的环境变量和程序执行的结果
+ * TODO：
+ * （1）一个合理修改：有另一个专门负责执行CGI的程序（进程池）web server与CGI程序之间用socket（UNIX域
+ *      或INET域都行）传递需要设置的环境变量和程序执行的结果
+ * （2）一个ugly的修改：每个工作线程复制一份extern char **environ环境变量副本，每次修改环境变量只修改
+ *      自身的这份副本，之后调用execle()时就可以将这份副本作为新程序的执行环境
  */
 void Request::_ExecCgi(const string &path)
 {
