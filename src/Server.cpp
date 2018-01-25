@@ -15,6 +15,7 @@ Server::Server() : m_bIsRun(true),
                    m_listen(),
                    m_conf(ConfigLoad::GetIns()),
                    m_tPool(std::stoi(m_conf->GetValue("thread_num"))),
+                   m_nWorkIndex(0),
                    m_upEvents(new struct epoll_event[sm_nMaxEvents])
 {
     //初始化signal fd，在这之前不应创建MLog，否则写日志线程无法继承此信号屏蔽字
@@ -131,18 +132,21 @@ void Server::start()
     }
 }
 /**
- * 目前的规则：选择维持链接少的工作线程
+ * 目前的规则：按顺序每次accept选择一个工作线程
  */
 size_t Server::ChooseTW()
 {
+    m_nWorkIndex %= m_tPool.size();
+    return m_nWorkIndex++;
+    /* //以下这种方式是选择链接数最少的，耗时大一点
     size_t index = 0, nMin = std::numeric_limits<size_t>::max();
     for (size_t i = 0; i < m_tPool.size(); ++i)
         if (m_tPool[i]->GetSockSize() < nMin)
         {
             index = i;
             nMin = m_tPool[i]->GetSockSize();
-        }
-    return index;
+        } 
+    return index;*/
 }
 /**
  * 传入工作线程中的回调函数，用于处理请求

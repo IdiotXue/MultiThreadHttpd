@@ -16,27 +16,28 @@ namespace MThttpd
  */
 class Server
 {
-  public:
-    Server();
-    ~Server();
-    void start();
-    size_t ChooseTW(); //选择工作线程oo
-    static int Handler(std::shared_ptr<Socket> pSock);
+public:
+  Server();
+  ~Server();
+  void start();
+  size_t ChooseTW(); //选择工作线程
+  static int Handler(std::shared_ptr<Socket> pSock);
 
-    Server(const Server &) = delete;
-    const Server &operator=(const Server &) = delete;
+  Server(const Server &) = delete;
+  const Server &operator=(const Server &) = delete;
 
-  private:
-    int m_sigFd; //signalfd，以file destriptor方式操作信号
-    bool m_bIsRun;
+private:
+  int m_sigFd; //signalfd，以file destriptor方式操作信号
+  bool m_bIsRun;
 
-    Socket m_listen; //监听socket
-    std::shared_ptr<ConfigLoad> m_conf;
-    std::vector<std::shared_ptr<TWork>> m_tPool; //线程池,TWork必须是heap object，其头文件中有解释
+  Socket m_listen; //监听socket
+  std::shared_ptr<ConfigLoad> m_conf;
+  std::vector<std::shared_ptr<TWork>> m_tPool; //线程池,TWork必须是heap object，其头文件中有解释
+  size_t m_nWorkIndex;                            //用于ChooseTW()中选择工作线程
 
-    static const int sm_nMaxEvents = 2; //目前只需要监听listen socket和signalfd两个FD
-    std::unique_ptr<struct epoll_event[]> m_upEvents;
-    int m_epFd; //epoll_create返回的FD
+  static const int sm_nMaxEvents = 2; //目前只需要监听listen socket和signalfd两个FD
+  std::unique_ptr<struct epoll_event[]> m_upEvents;
+  int m_epFd; //epoll_create返回的FD
 };
 }
 

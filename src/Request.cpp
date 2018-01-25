@@ -1,6 +1,8 @@
 #include <algorithm> //transform
 #include <sys/stat.h>
 #include <fstream>
+#include <unistd.h>   //pipe，dup2
+#include <sys/wait.h> //waitpid
 #include "Request.h"
 #include "MLog.h"
 
@@ -130,13 +132,13 @@ void Request::RequestError()
         <p> Your browser sent a bad request,such as a POST without a Content-Length.</p>\r\n ";
         break;
     case ErrorType::NotFound:
-        msg = "HTTP/1.0 404 Not Found\r\nContent-Type: text/html\r\n\r\n<HTML><TITLE> Not Found</TITLE>\r\n<BODY><P> The server could not fulfill\r\nyour request because the resource specified\r\nis unavailable or nonexistent.\r\n</BODY></HTML>\r\n ";
+        msg = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<HTML><TITLE> Not Found</TITLE>\r\n<BODY><P> The server could not fulfill\r\nyour request because the resource specified\r\nis unavailable or nonexistent.\r\n</BODY></HTML>\r\n ";
         break;
     case ErrorType::SerError:
-        msg = "HTTP/1.0 500 Internal Server Error\r\nContent-Type: text/html\r\n\r\n<p>Http Server Error</p>\r\n";
+        msg = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\n\r\n<p>Http Server Error</p>\r\n";
         break;
     case ErrorType::MeNotIm:
-        msg = "HTTP/1.0 501 Method Not Implemented\r\nContent-Type: text/html\r\n\r\n<HTML><HEAD><TITLE>Method Not Implemented\r\n</TITLE></HEAD>\r\n<BODY><P>HTTP request method not supported.\r\n</BODY></HTML>\r\n";
+        msg = "HTTP/1.1 501 Method Not Implemented\r\nContent-Type: text/html\r\n\r\n<HTML><HEAD><TITLE>Method Not Implemented\r\n</TITLE></HEAD>\r\n<BODY><P>HTTP request method not supported.\r\n</BODY></HTML>\r\n";
         break;
     default: //ErrorType::Correct
         return;
@@ -166,7 +168,7 @@ void Request::Response()
     if ((st.st_mode & S_IXUSR) || (st.st_mode & S_IXGRP) || (st.st_mode & S_IXOTH)) //访问的文件可执行
         m_bCgi = true;
     if (m_bCgi)
-        _ExecCgi();
+        _ExecCgi(stPath);
     else
         _SendFile(stPath);
 }
@@ -219,31 +221,133 @@ bool Request::_IsCgi()
  */
 void Request::_SendFile(const string &file)
 {
-    std::ifstream ifInput(file);
+    std::ifstream ifInput(file); //从strace中看到ifstream无阻塞read，每次8191 Byte
     if (!ifInput.good())
     {
         m_errNum = ErrorType::NotFound;
         RequestError();
         return;
     }
-    string msg("HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n");
+    string stRespon("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n");
     string line;
     while (getline(ifInput, line))
     {
-        msg += std::move(line + "\r\n");
-        if (msg.size() > (1024 * 1024)) //msg大于1MB时，先写入
+        stRespon += std::move(line + "\r\n");
+        if (stRespon.size() > (1024 * 1024)) //stRespon大于1MB时，先写入
         {
-            m_pSock->Append(msg);
-            msg = "";
+            m_pSock->Append(stRespon);
+            stRespon = "";
         }
     }
-    if (msg.size() > 0)
-        m_pSock->Append(msg);
+    if (stRespon.size() > 0)
+        m_pSock->Append(stRespon);
     _LOG(Level::INFO, {m_pSock->GetAddr(), "SendFile:" + file});
 }
 /**
- * 处理执行CGI脚本的请求
+ * 处理执行CGI脚本的请求，以fork-exec的方式执行，低效的CGI做法（参考TinyHttp）
+ * ！注意！：这是一种非常容易出错、不够合理的做法，Linux下fork()与多线程的协作性很差。
+ * （1）可能死锁：fork后的子进程只存在一个线程（调用fork的线程），其他线程会消失，如果恰好其他
+ *      线程占有某个锁且突然死亡，没有机会解锁，那么子进程试图对同一个mutex加锁，就会死锁
+ * （2）fork和exec之间只能调用异步信号安全的函数，或者可重入的线程安全的函数，man 7 signal中
+ *      指出了哪些是异步信号安全的，除此之外的系统调用或库函数都不应被调用。然而下面的做法还是调
+ *      用了putenv（其实现中调用了malloc）设置CGI环境变量
+ *      TODO：寻找异步信号安全的设置环境变量的方法，不确定execle()传入环境表是否能解决
+ * TODO：一个合理的做法可以是Fastcgi的实现机制：有另一个专门负责执行CGI的程序（进程池）web server与CGI程序之间
+ *      用socket（UNIX域或INET域都行）传递需要设置的环境变量和程序执行的结果
  */
-void Request::_ExecCgi()
+void Request::_ExecCgi(const string &path)
 {
+    int fdCgiOut[2]; //匿名管道，从子进程写到主进程
+    int fdCgiIn[2];  //匿名管道，从主进程写到子进程
+    if (pipe(fdCgiOut) < 0)
+    {
+        m_errNum = ErrorType::SerError;
+        _LOG(Level::WARN, {m_pSock->GetAddr(), WHERE, "pipe fail"});
+        RequestError();
+        return;
+    }
+    if (pipe(fdCgiIn) < 0)
+    {
+        m_errNum = ErrorType::SerError;
+        _LOG(Level::WARN, {m_pSock->GetAddr(), WHERE, "pipe fail"});
+        RequestError();
+        return;
+    }
+    pid_t pid;
+    if ((pid = fork()) < 0)
+    {
+        m_errNum = ErrorType::SerError;
+        _LOG(Level::WARN, {m_pSock->GetAddr(), WHERE, "fork() fail"});
+        RequestError();
+        return;
+    }
+    int status;
+    string stRespon("HTTP/1.1 200 OK\r\n");
+    if (pid == 0) //子进程，切记exec之前要执行异步信号安全的函数
+    {
+        //从主进程读,并写回主进程
+        dup2(fdCgiIn[0], STDIN_FILENO);   //把STDIN重定向到fdCgiInput的读取端
+        dup2(fdCgiOut[1], STDOUT_FILENO); //把STDOUT重定向到fdCgiOut的写端
+        close(fdCgiIn[1]);
+        close(fdCgiOut[0]);
+        string stMethod("REQUEST_METHOD=");
+        char cMethod[32]; //putenv可能直接把字符串指针放入环境链表，不能让变量在exec前就析构，所以专门放在外面
+        char cQuery[256];
+        char cContLen[32];
+        string stRespon = "";
+        if (m_method == Method::GET)
+        {
+            stMethod += "GET";
+            copy(stMethod.begin(), stMethod.end(), cMethod);
+            string stQuery = "QUERY_STRING=" + m_stQuery;
+            copy(stQuery.begin(), stQuery.end(), cQuery);
+            cQuery[stQuery.size()] = '\0';
+            putenv(cMethod); //ugly，不是信号安全的函数
+            putenv(cQuery);
+        }
+        else
+        {
+            stMethod += "POST";
+            copy(stMethod.begin(), stMethod.end(), cMethod);
+            string stContentLen = "CONTENT_LENGTH=" + std::to_string(m_stQuery.size());
+            copy(stContentLen.begin(), stContentLen.end(), cContLen);
+            cContLen[stContentLen.size()] = '\0';
+            putenv(cMethod);
+            putenv(cContLen);
+        }
+        execl(path.c_str(), path.c_str(), (char *)0); //这种执行方式必须把py文件chmod u+x file
+        //TODO:这种方式子进程无法执行完退出，导致pipe没关闭，父进程一直阻塞在read，待找出原因
+        // execl("/usr/bin/python", path.c_str(), (char *)0);
+        close(fdCgiIn[0]); //execl若成功，则不会执行这3句
+        close(fdCgiOut[1]);
+        exit(EXIT_FAILURE);
+    }
+    else //父进程
+    {
+        close(fdCgiIn[0]);
+        close(fdCgiOut[1]);
+        if (m_method == Method::POST)
+            write(fdCgiIn[1], m_stQuery.c_str(), m_stQuery.size()); //阻塞写
+        char buf[4096];                                             //pipe buf的大小一般为4096bytes
+        int ret = read(fdCgiOut[0], buf, sizeof(buf));              //阻塞读
+        //fdCgiOut写端关闭时会返回0,此处相当于等待子进程执行完毕，确保所有的输出都放入stRespon
+        while (ret > 0)
+        {
+            stRespon += string(buf, ret);
+            ret = read(fdCgiOut[0], buf, sizeof(buf));
+        }
+        close(fdCgiIn[1]);
+        close(fdCgiOut[0]);
+        waitpid(pid, &status, 0);
+        printf("child process exit %d\n", status); //0:success,1:fail
+        if (status == EXIT_FAILURE)
+        {
+            m_errNum = ErrorType::SerError;
+            RequestError();
+            _LOG(Level::WARN, {m_pSock->GetAddr(), WHERE, "child execl() fail"});
+            return;
+        }
+        m_pSock->Append(stRespon);
+        _LOG(Level::INFO, {m_pSock->GetAddr(), "ExecCgi:" + path});
+    }
 }

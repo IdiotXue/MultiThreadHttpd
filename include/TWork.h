@@ -40,7 +40,7 @@ class TWork : public std::enable_shared_from_this<TWork>
     void IOLoop();                                          //event loop等待socket消息和主线程通知用的eventfd
     void AddTask(std::shared_ptr<Socket> pSock);            //主线程添加任务给任务队列
     void GetTask();                                         //工作线程获取任务
-    size_t GetSockSize() const { return m_Fd2Sock.size(); } //获取工作线程维持的连接数
+    // size_t GetSockSize() const { return m_Fd2Sock.size(); } //TODO：没加锁错误，可以用一个atomic<int>来记录连接数
 
     TWork(const TWork &) = delete;
     const TWork &operator=(const TWork &) = delete;

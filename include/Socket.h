@@ -52,7 +52,7 @@ private:
   bool m_bWrite;                          //记录是否有数据要写
   std::string m_stCliAddr;                //服务器地址
   struct sockaddr_in m_addr;              //IPv4域下，保存服务器或连接的客户端socket地址
-  static const size_t sm_nBufSize = 1024; //初始时给每个Socket分配1KB的读和写缓冲
+  static const size_t sm_nBufSize = 4096; //初始时给每个Socket分配1KB的读和写缓冲
   char m_cTmpBuf[sm_nBufSize];            //仅用于recv从内核复制数据到用户空间，固定大小1KB
   Buffer<char> m_rdBuf;                   //读缓冲可变大小，由每个Socket自己维护
   Buffer<char> m_wrBuf;                   //写缓冲可变大小，由每个Socket自己维护

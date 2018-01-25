@@ -46,7 +46,7 @@ class Request
     static int _FindFirstReq(const char *str, size_t len); //分包
     bool _IsCgi();
     void _SendFile(const std::string &file);
-    void _ExecCgi();
+    void _ExecCgi(const std::string &path);
 
   private:
     std::shared_ptr<Socket> m_pSock;
