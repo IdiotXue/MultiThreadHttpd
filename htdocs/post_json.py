@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*-coding:utf-8-*-
 
-# chmod 764 post_query.py
+# chmod 764 post_json.py
 # 获取POST请求的参数：localhost:8001/post_query.py
 # 注意：post是从HTTP请求报文的主体读取参数的，Content-Length存了主体的长度，这和GET不同
 
@@ -24,6 +24,7 @@ query_pw = form.getvalue('pw')
 import os
 import sys
 from urllib import unquote  # 做url decode
+import json
 
 if __name__ == '__main__':
 
@@ -32,16 +33,7 @@ if __name__ == '__main__':
 
     content_len = int(os.environ['CONTENT_LENGTH'])
     query = sys.stdin.read(content_len)  # 从标准输入读取指定长度的字节数
-    # 字符串解析
-    query_list = query.split('&', query.count('&'))
-    param_dict = {}
-    for param in query_list:
-        key, value = param.split('=', 1)
-        key = unquote(key)  # 中文会decode为GBK编码
-        value = unquote(value)
-        param_dict[key] = value
-    query_name = param_dict['name']
-    query_pw = param_dict['pw']
+    data = json.loads(query) # 反序列化
 
     print "Content-type:text/html"
     print
@@ -51,6 +43,6 @@ if __name__ == '__main__':
     print "<title>Get Query</title>"
     print "</head>"
     print "<body>"
-    print "<h2>Name:%s Password:%s</h2>" % (query_name, query_pw)
+    print "<h2>Name:%s Password:%s</h2>" % (data['name'], data['pw'])
     print "</body>"
     print "</html>"
